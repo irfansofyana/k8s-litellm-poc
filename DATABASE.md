@@ -23,9 +23,15 @@ Before starting the database, generate a secure password:
 ./scripts/generate-env.sh
 ```
 
-This creates a `.env` file with a secure 40-character `POSTGRES_PASSWORD`. The password will be used by:
+This creates a `.env` file with secure 40-character credentials:
+- `POSTGRES_PASSWORD` - Database password
+- `LITELLM_MASTER_KEY` - LiteLLM API authentication key
+
+These credentials will be used by:
 - Docker Compose to initialize the PostgreSQL database
-- Vault Agent to inject credentials into the LiteLLM pod (stored at `secret/litellm/database` with field `password`)
+- Vault Agent to inject credentials into the LiteLLM pod:
+  - Database password stored at `secret/litellm/database` (field: `password`)
+  - Master key stored at `secret/litellm/masterkey` (field: `master-key`)
 
 ### 1. Start the database
 
