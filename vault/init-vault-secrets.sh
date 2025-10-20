@@ -11,8 +11,8 @@ usage() {
 Usage:
   OPENROUTER_API_KEY=<key> ./init-vault-secrets.sh
   # or
-  OPENROUTER_API_KEY=<key> DB_PASSWORD=<pwd> ./init-vault-secrets.sh
-  # or (reads POSTGRES_PASSWORD from environment or .env file)
+  OPENROUTER_API_KEY=<key> DB_PASSWORD=<pwd> LITELLM_MASTER_KEY=<key> ./init-vault-secrets.sh
+  # or (reads POSTGRES_PASSWORD and LITELLM_MASTER_KEY from environment or .env file)
   ./scripts/generate-env.sh && ./init-vault-secrets.sh
 
 Env vars:
@@ -21,12 +21,14 @@ Env vars:
   OPENROUTER_API_KEY OpenRouter API key (required)
   DB_PASSWORD        Database password (optional, auto-detected from POSTGRES_PASSWORD or .env)
   POSTGRES_PASSWORD  Alternative to DB_PASSWORD (read from env or .env)
+  LITELLM_MASTER_KEY LiteLLM master key (optional, auto-detected from .env)
 
 This script:
   - Waits for Vault to be ready and port-forwards to 8200
   - Enables KV v2 at secret/ (if needed)
   - Writes secret at secret/litellm/openrouter with field api-key
   - Writes secret at secret/litellm/database with field password
+  - Writes secret at secret/litellm/masterkey with field master-key
   - Creates policy litellm-policy allowing read of secret/data/litellm/*
   - Enables Kubernetes auth and configures it with the cluster
   - Creates role 'litellm-role' bound to SA 'litellm' in namespace $NS
@@ -71,6 +73,29 @@ if [[ ${#DB_PASS} -lt 12 ]]; then
   echo "Warning: Database password is less than 12 characters (${#DB_PASS}). Recommend using ./scripts/generate-env.sh" >&2
 fi
 
+# Detect LiteLLM master key from multiple sources (precedence: LITELLM_MASTER_KEY > .env)
+MASTER_KEY="${LITELLM_MASTER_KEY:-}"
+if [[ -z "$MASTER_KEY" ]] && [[ -f ".env" ]]; then
+  echo "Loading LiteLLM master key from .env file..."
+  # shellcheck disable=SC1091
+  set +u  # Allow unset variables while sourcing
+  source .env
+  set -u
+  MASTER_KEY="${LITELLM_MASTER_KEY:-}"
+fi
+
+if [[ -z "$MASTER_KEY" ]]; then
+  echo "Error: LiteLLM master key not found. Please provide one of:" >&2
+  echo "  - LITELLM_MASTER_KEY environment variable" >&2
+  echo "  - .env file with LITELLM_MASTER_KEY" >&2
+  echo "  - Run ./scripts/generate-env.sh first" >&2
+  exit 1
+fi
+
+if [[ ${#MASTER_KEY} -lt 12 ]]; then
+  echo "Warning: LiteLLM master key is less than 12 characters (${#MASTER_KEY}). Recommend using ./scripts/generate-env.sh" >&2
+fi
+
 # Ensure Vault is ready
 echo "Waiting for Vault pod to be ready..."
 kubectl -n "$NS" wait --for=condition=ready pod -l app.kubernetes.io/name=vault --timeout=300s
@@ -101,6 +126,9 @@ vault kv put secret/litellm/openrouter api-key="$OPENROUTER_API_KEY"
 
 echo "Storing database password in Vault..."
 vault kv put secret/litellm/database password="$DB_PASS"
+
+echo "Storing LiteLLM master key in Vault..."
+vault kv put secret/litellm/masterkey master-key="$MASTER_KEY"
 
 # Policy
 vault policy write litellm-policy "$POLICY_FILE"
@@ -137,4 +165,5 @@ vault write auth/kubernetes/role/litellm-role \
 echo "[SUCCESS] Vault initialized with the following secrets:"
 echo "  - secret/litellm/openrouter (api-key)"
 echo "  - secret/litellm/database (password)"
+echo "  - secret/litellm/masterkey (master-key)"
 echo "Policy and Kubernetes auth role configured."

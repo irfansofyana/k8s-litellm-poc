@@ -19,7 +19,7 @@ kubectl create namespace litellm
 helm install vault ./charts/vault -n litellm -f vault/vault-values.yaml
 kubectl -n litellm wait --for=condition=ready pod -l app.kubernetes.io/name=vault --timeout=300s
 
-# 4. Initialize Vault with secrets (stores OpenRouter API key + database password)
+# 4. Initialize Vault with secrets (stores OpenRouter API key, database password, and master key)
 export OPENROUTER_API_KEY="sk-or-v1-..."
 ./vault/init-vault-secrets.sh
 
@@ -29,8 +29,9 @@ kubectl -n litellm rollout status deploy/litellm --timeout=300s
 
 # 6. Test
 kubectl -n litellm port-forward svc/litellm 4000:4000 &
+source .env
 curl http://127.0.0.1:4000/chat/completions \
-  -H "Authorization: Bearer poc-master-key" \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"openai-gpt-4","messages":[{"role":"user","content":"Hello!"}]}'
 ```
@@ -116,8 +117,9 @@ export OPENROUTER_API_KEY="sk-or-v1-..."
 
 This script:
 - Enables KV v2 secrets engine at `secret/`
-- Stores OpenRouter API key at `secret/litellm/openrouter`
-- Stores database password at `secret/litellm/database` (read from `.env`)
+- Stores OpenRouter API key at `secret/litellm/openrouter` (field: `api-key`)
+- Stores database password at `secret/litellm/database` (field: `password`, read from `.env`)
+- Stores LiteLLM master key at `secret/litellm/masterkey` (field: `master-key`, read from `.env`)
 - Creates policy `litellm-policy` for read access
 - Configures Kubernetes auth and creates role `litellm-role`
 
@@ -165,8 +167,11 @@ kubectl -n litellm get pods -o jsonpath='{.items[0].spec.containers[*].name}'
 - No separate ConfigMap resource or volume mount needed
 
 ### Secret Management
-- OpenRouter API key stored in Vault at `secret/litellm/openrouter`
-- Vault Agent injects the key directly into config.yaml using template functions
+- All secrets stored securely in Vault:
+  - OpenRouter API key at `secret/litellm/openrouter` (field: `api-key`)
+  - Database password at `secret/litellm/database` (field: `password`)
+  - LiteLLM master key at `secret/litellm/masterkey` (field: `master-key`)
+- Vault Agent injects secrets directly into config.yaml and database env using template functions
 - No secrets in plain text in ConfigMaps or environment variables
 
 ### Local Charts
@@ -190,8 +195,11 @@ kubectl -n litellm run netcheck --rm -i --image=alpine:3.20 -- sh -c 'apk add --
 ```bash
 kubectl -n litellm port-forward svc/litellm 4000:4000 &
 
+# Load master key from .env
+source .env
+
 curl -sS http://127.0.0.1:4000/chat/completions \
-  -H "Authorization: Bearer poc-master-key" \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai-gpt-4",
@@ -247,20 +255,24 @@ export VAULT_TOKEN=root
 vault read auth/kubernetes/role/litellm-role
 vault policy read litellm-policy
 vault kv get secret/litellm/openrouter
+vault kv get secret/litellm/database
+vault kv get secret/litellm/masterkey
 ```
 
 ### Testing specific models
 
 List available models:
 ```bash
+source .env
 curl -sS http://127.0.0.1:4000/models \
-  -H "Authorization: Bearer poc-master-key" | jq '.data[].id'
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" | jq '.data[].id'
 ```
 
 Test Claude:
 ```bash
+source .env
 curl -sS http://127.0.0.1:4000/chat/completions \
-  -H "Authorization: Bearer poc-master-key" \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-3-opus",
@@ -309,15 +321,14 @@ helm upgrade litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values.
 ⚠️ **This is a POC setup. For production:**
 
 1. **Vault**: Use persistent storage, HA mode, proper TLS, and real authentication (not dev mode)
-2. **Secrets**: Use Vault's dynamic secrets or rotate keys regularly
-3. **Master Key**: Store `LITELLM_MASTER_KEY` in Vault, not hardcoded
-4. **Resources**: Adjust CPU/memory limits based on load
-5. **Monitoring**: Add Prometheus/Grafana for metrics
-6. **Database**: Enable PostgreSQL for request logging and caching
-7. **Redis**: Enable for rate limiting and caching
-8. **Ingress**: Add proper ingress with TLS termination
-9. **Network Policies**: Restrict pod-to-pod communication
-10. **RBAC**: Tighten service account permissions
+2. **Secrets**: Rotate keys regularly using Vault's secret rotation features
+3. **Resources**: Adjust CPU/memory limits based on load
+4. **Monitoring**: Add Prometheus/Grafana for metrics
+5. **Database**: Use managed PostgreSQL (AWS RDS, Cloud SQL, etc.) for production
+6. **Redis**: Enable for rate limiting and caching
+7. **Ingress**: Add proper ingress with TLS termination
+8. **Network Policies**: Restrict pod-to-pod communication
+9. **RBAC**: Tighten service account permissions
 
 ## Cleanup
 

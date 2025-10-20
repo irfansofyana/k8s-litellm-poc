@@ -1,8 +1,10 @@
 # Reference only: not mounted by Helm by default.
 # This mirrors the injected config template and is included for documentation.
+# All secrets (master_key, api_key) are injected at runtime by Vault Agent.
 
 general_settings:
-  master_key: "poc-master-key"
+  # Injected at runtime by Vault Agent from secret/litellm/masterkey
+  master_key: "REPLACED_AT_RUNTIME_BY_VAULT_TEMPLATE"
 
 litellm_settings:
   drop_params: true
