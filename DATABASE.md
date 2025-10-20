@@ -13,6 +13,20 @@ This document describes the local PostgreSQL database setup that simulates an AW
 
 ## Quick Start
 
+> **Note:** For the complete end-to-end deployment workflow (including Kubernetes and Vault setup), see the main [README.md](README.md#tldr---quick-deploy).
+
+### 0. Generate secure credentials
+
+Before starting the database, generate a secure password:
+
+```bash
+./scripts/generate-env.sh
+```
+
+This creates a `.env` file with a secure 40-character `POSTGRES_PASSWORD`. The password will be used by:
+- Docker Compose to initialize the PostgreSQL database
+- Vault Agent to inject credentials into the LiteLLM pod (stored at `secret/litellm/database` with field `password`)
+
 ### 1. Start the database
 
 ```bash

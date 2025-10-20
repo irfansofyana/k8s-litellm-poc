@@ -10,15 +10,23 @@ usage() {
   cat <<'EOF'
 Usage:
   OPENROUTER_API_KEY=<key> ./init-vault-secrets.sh
+  # or
+  OPENROUTER_API_KEY=<key> DB_PASSWORD=<pwd> ./init-vault-secrets.sh
+  # or (reads POSTGRES_PASSWORD from environment or .env file)
+  ./scripts/generate-env.sh && ./init-vault-secrets.sh
 
 Env vars:
   NS                 Namespace where Vault is installed (default: litellm)
   VAULT_TOKEN        Dev root token (default: root)
+  OPENROUTER_API_KEY OpenRouter API key (required)
+  DB_PASSWORD        Database password (optional, auto-detected from POSTGRES_PASSWORD or .env)
+  POSTGRES_PASSWORD  Alternative to DB_PASSWORD (read from env or .env)
 
 This script:
   - Waits for Vault to be ready and port-forwards to 8200
   - Enables KV v2 at secret/ (if needed)
   - Writes secret at secret/litellm/openrouter with field api-key
+  - Writes secret at secret/litellm/database with field password
   - Creates policy litellm-policy allowing read of secret/data/litellm/*
   - Enables Kubernetes auth and configures it with the cluster
   - Creates role 'litellm-role' bound to SA 'litellm' in namespace $NS
@@ -35,6 +43,33 @@ if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
 fi
 
 : "${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required in environment}"
+
+# Detect database password from multiple sources (precedence: DB_PASSWORD > POSTGRES_PASSWORD > .env)
+DB_PASS="${DB_PASSWORD:-}"
+if [[ -z "$DB_PASS" ]]; then
+  DB_PASS="${POSTGRES_PASSWORD:-}"
+fi
+if [[ -z "$DB_PASS" ]] && [[ -f ".env" ]]; then
+  echo "Loading database password from .env file..."
+  # shellcheck disable=SC1091
+  set +u  # Allow unset variables while sourcing
+  source .env
+  set -u
+  DB_PASS="${POSTGRES_PASSWORD:-}"
+fi
+
+if [[ -z "$DB_PASS" ]]; then
+  echo "Error: Database password not found. Please provide one of:" >&2
+  echo "  - DB_PASSWORD environment variable" >&2
+  echo "  - POSTGRES_PASSWORD environment variable" >&2
+  echo "  - .env file with POSTGRES_PASSWORD" >&2
+  echo "  - Run ./scripts/generate-env.sh first" >&2
+  exit 1
+fi
+
+if [[ ${#DB_PASS} -lt 12 ]]; then
+  echo "Warning: Database password is less than 12 characters (${#DB_PASS}). Recommend using ./scripts/generate-env.sh" >&2
+fi
 
 # Ensure Vault is ready
 echo "Waiting for Vault pod to be ready..."
@@ -60,8 +95,12 @@ if ! vault secrets list -format=json | jq -e 'has("secret/")' >/dev/null 2>&1; t
   vault secrets enable -path=secret kv-v2
 fi
 
-# Write secret
+# Write secrets
+echo "Storing OpenRouter API key in Vault..."
 vault kv put secret/litellm/openrouter api-key="$OPENROUTER_API_KEY"
+
+echo "Storing database password in Vault..."
+vault kv put secret/litellm/database password="$DB_PASS"
 
 # Policy
 vault policy write litellm-policy "$POLICY_FILE"
@@ -95,4 +134,7 @@ vault write auth/kubernetes/role/litellm-role \
   policies="litellm-policy" \
   ttl="24h"
 
-echo "[SUCCESS] Vault initialized, secret stored, policy and role configured."
+echo "[SUCCESS] Vault initialized with the following secrets:"
+echo "  - secret/litellm/openrouter (api-key)"
+echo "  - secret/litellm/database (password)"
+echo "Policy and Kubernetes auth role configured."

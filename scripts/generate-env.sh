@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# generate-env.sh: Generate a secure .env file with a random POSTGRES_PASSWORD
+
+ENV_FILE=".env"
+TEMP_FILE=".env.tmp"
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/generate-env.sh
+
+Generates a secure .env file with a 40-character random password for POSTGRES_PASSWORD.
+If .env already exists, you will be prompted before overwriting.
+
+The generated password uses only alphanumeric characters (A-Za-z0-9) to avoid
+shell quoting issues.
+
+Requirements:
+  - openssl (preferred) or /dev/urandom
+
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+# Check for required tools
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "Warning: openssl not found. Falling back to /dev/urandom for password generation."
+  if [[ ! -r /dev/urandom ]]; then
+    echo "Error: Neither openssl nor /dev/urandom is available. Cannot generate secure password." >&2
+    exit 1
+  fi
+fi
+
+# Check if .env already exists
+if [[ -f "$ENV_FILE" ]]; then
+  echo "Warning: $ENV_FILE already exists."
+  read -r -p "Overwrite? (y/N) " CONFIRM
+  if [[ ! "${CONFIRM:-N}" =~ ^[Yy]$ ]]; then
+    echo "Aborted. Existing $ENV_FILE was not modified."
+    exit 0
+  fi
+fi
+
+# Generate a secure 40-character alphanumeric password
+echo "Generating secure password..."
+if command -v openssl >/dev/null 2>&1; then
+  # Use openssl for random bytes, then filter to alphanumeric
+  PASSWORD="$(openssl rand -base64 64 | tr -dc 'A-Za-z0-9' | head -c 40)"
+else
+  # Fallback to /dev/urandom
+  PASSWORD="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40)"
+fi
+
+# Validate we got a 40-character password
+if [[ ${#PASSWORD} -ne 40 ]]; then
+  echo "Error: Failed to generate a 40-character password (got ${#PASSWORD} characters)." >&2
+  exit 1
+fi
+
+# Write to temp file atomically
+echo "# PostgreSQL password for docker-compose" > "$TEMP_FILE"
+echo "# This file should NOT be committed to git" >> "$TEMP_FILE"
+echo "POSTGRES_PASSWORD=$PASSWORD" >> "$TEMP_FILE"
+
+# Move atomically and set permissions
+mv "$TEMP_FILE" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+echo "[SUCCESS] $ENV_FILE created with a secure 40-character password."
+echo "          File permissions set to 600 (owner read/write only)."
+echo ""
+echo "Next steps:"
+echo "  1. docker compose up -d"
+echo "  2. ./vault/init-vault-secrets.sh  (stores password in Vault)"

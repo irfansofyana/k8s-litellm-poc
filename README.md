@@ -5,6 +5,10 @@ A POC for deploying LiteLLM Proxy on Kubernetes using the official LiteLLM Helm 
 ## TL;DR - Quick Deploy
 
 ```bash
+# 0. Generate .env and start local database
+./scripts/generate-env.sh
+docker compose up -d
+
 # 1. Pull charts locally
 ./scripts/pull-charts.sh
 
@@ -15,7 +19,7 @@ kubectl create namespace litellm
 helm install vault ./charts/vault -n litellm -f vault/vault-values.yaml
 kubectl -n litellm wait --for=condition=ready pod -l app.kubernetes.io/name=vault --timeout=300s
 
-# 4. Initialize Vault (replace with your OpenRouter API key)
+# 4. Initialize Vault with secrets (stores OpenRouter API key + database password)
 export OPENROUTER_API_KEY="sk-or-v1-..."
 ./vault/init-vault-secrets.sh
 
@@ -33,7 +37,9 @@ curl http://127.0.0.1:4000/chat/completions \
 
 ## Prerequisites
 - A local Kubernetes cluster (OrbStack, Kind, Minikube, Docker Desktop, k3d, etc.)
-- kubectl, Helm 3.8+, vault CLI, jq
+- Docker and Docker Compose (for local PostgreSQL)
+- kubectl, Helm 3.8+, vault CLI, openssl
+- jq (optional, for testing)
 - OpenRouter API key
 
 ## Architecture
@@ -46,7 +52,24 @@ This POC deploys:
 
 ## Quick start
 
-### 1) Pull Helm charts locally
+### 1) Setup local database
+
+**Generate secure credentials and start PostgreSQL:**
+
+```bash
+# Generate .env with a secure 40-character password
+./scripts/generate-env.sh
+
+# Start PostgreSQL (reads POSTGRES_PASSWORD from .env)
+docker compose up -d
+
+# Verify database is healthy
+docker compose ps
+```
+
+**Note:** If you're using an external PostgreSQL instance instead of Docker Compose, you can skip `docker compose up -d`, but you must still provide the database password via `DB_PASSWORD`, `POSTGRES_PASSWORD`, or `.env` file so that Vault can be populated with the secret.
+
+### 2) Pull Helm charts locally
 
 **Option A: Use the helper script (recommended)**
 
@@ -71,20 +94,20 @@ This creates:
 - `charts/vault/` - HashiCorp Vault chart
 - `charts/litellm-helm/` - LiteLLM chart
 
-### 2) Create namespace
+### 3) Create namespace
 
 ```bash
 kubectl create namespace litellm
 ```
 
-### 3) Install Vault (dev mode) with Injector
+### 4) Install Vault (dev mode) with Injector
 
 ```bash
 helm install vault ./charts/vault -n litellm -f vault/vault-values.yaml
 kubectl -n litellm wait --for=condition=ready pod -l app.kubernetes.io/name=vault --timeout=300s
 ```
 
-### 4) Initialize Vault and store OpenRouter API key
+### 5) Initialize Vault and store secrets
 
 ```bash
 export OPENROUTER_API_KEY="sk-or-v1-..."
@@ -94,17 +117,18 @@ export OPENROUTER_API_KEY="sk-or-v1-..."
 This script:
 - Enables KV v2 secrets engine at `secret/`
 - Stores OpenRouter API key at `secret/litellm/openrouter`
+- Stores database password at `secret/litellm/database` (read from `.env`)
 - Creates policy `litellm-policy` for read access
 - Configures Kubernetes auth and creates role `litellm-role`
 
-### 5) Deploy LiteLLM with inline config (no ConfigMap mount)
+### 6) Deploy LiteLLM with inline config (no ConfigMap mount)
 
 ```bash
 helm install litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values.yaml
 kubectl -n litellm rollout status deploy/litellm --timeout=300s
 ```
 
-### 6) Test the proxy
+### 7) Test the proxy
 
 ```bash
 # Port-forward to access LiteLLM
@@ -122,7 +146,7 @@ curl -sS http://127.0.0.1:4000/chat/completions \
   }' | jq
 ```
 
-### 7) Verify Vault injection
+### 8) Verify Vault injection
 
 ```bash
 # Check that config.yaml was injected by Vault Agent
@@ -311,15 +335,19 @@ This will:
 ```
 k8s-litellm-poc/
 ├── README.md                      # This file
-├── .gitignore                     # Git ignore (charts/, logs, etc.)
+├── DATABASE.md                    # PostgreSQL setup documentation
+├── .gitignore                     # Git ignore (charts/, .env, logs, etc.)
+├── .env.example                   # Template for environment variables
+├── docker-compose.yml             # Local PostgreSQL database
 ├── vault/
 │   ├── vault-values.yaml          # Vault Helm values (dev mode + injector)
 │   ├── vault-policy.hcl           # Vault policy for LiteLLM
-│   └── init-vault-secrets.sh      # Script to initialize Vault
+│   └── init-vault-secrets.sh      # Script to initialize Vault secrets
 ├── litellm/
 │   ├── litellm-values.yaml        # LiteLLM Helm values with Vault annotations
 │   └── config.yaml                # Reference config (not mounted)
 ├── scripts/
+│   ├── generate-env.sh            # Generate secure .env file
 │   ├── pull-charts.sh             # Script to pull Helm charts locally
 │   └── cleanup.sh                 # Cleanup script
 └── charts/                        # Local Helm charts (gitignored)
