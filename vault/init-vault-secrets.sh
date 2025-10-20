@@ -121,14 +121,13 @@ if ! vault secrets list -format=json | jq -e 'has("secret/")' >/dev/null 2>&1; t
 fi
 
 # Write secrets
-echo "Storing OpenRouter API key in Vault..."
-vault kv put secret/litellm/openrouter api-key="$OPENROUTER_API_KEY"
+echo "Storing combined app secrets in Vault (secret/litellm/secretapps)..."
+vault kv put secret/litellm/secretapps \
+  openrouter_api_key="$OPENROUTER_API_KEY" \
+  master_key="$MASTER_KEY"
 
 echo "Storing database password in Vault..."
 vault kv put secret/litellm/database password="$DB_PASS"
-
-echo "Storing LiteLLM master key in Vault..."
-vault kv put secret/litellm/masterkey master-key="$MASTER_KEY"
 
 # Policy
 vault policy write litellm-policy "$POLICY_FILE"
@@ -163,7 +162,6 @@ vault write auth/kubernetes/role/litellm-role \
   ttl="24h"
 
 echo "[SUCCESS] Vault initialized with the following secrets:"
-echo "  - secret/litellm/openrouter (api-key)"
+echo "  - secret/litellm/secretapps (openrouter_api_key, master_key)"
 echo "  - secret/litellm/database (password)"
-echo "  - secret/litellm/masterkey (master-key)"
 echo "Policy and Kubernetes auth role configured."

@@ -117,9 +117,8 @@ export OPENROUTER_API_KEY="sk-or-v1-..."
 
 This script:
 - Enables KV v2 secrets engine at `secret/`
-- Stores OpenRouter API key at `secret/litellm/openrouter` (field: `api-key`)
-- Stores database password at `secret/litellm/database` (field: `password`, read from `.env`)
-- Stores LiteLLM master key at `secret/litellm/masterkey` (field: `master-key`, read from `.env`)
+- Stores combined app secrets at `secret/litellm/secretapps` (JSON fields: `openrouter_api_key`, `master_key`)
+- Stores database password at `secret/litellm/database` (field: `password`)
 - Creates policy `litellm-policy` for read access
 - Configures Kubernetes auth and creates role `litellm-role`
 
@@ -168,9 +167,8 @@ kubectl -n litellm get pods -o jsonpath='{.items[0].spec.containers[*].name}'
 
 ### Secret Management
 - All secrets stored securely in Vault:
-  - OpenRouter API key at `secret/litellm/openrouter` (field: `api-key`)
+  - Combined app secrets at `secret/litellm/secretapps` (fields: `openrouter_api_key`, `master_key`)
   - Database password at `secret/litellm/database` (field: `password`)
-  - LiteLLM master key at `secret/litellm/masterkey` (field: `master-key`)
 - Vault Agent injects secrets directly into config.yaml and database env using template functions
 - No secrets in plain text in ConfigMaps or environment variables
 
@@ -254,9 +252,8 @@ export VAULT_TOKEN=root
 
 vault read auth/kubernetes/role/litellm-role
 vault policy read litellm-policy
-vault kv get secret/litellm/openrouter
+vault kv get secret/litellm/secretapps
 vault kv get secret/litellm/database
-vault kv get secret/litellm/masterkey
 ```
 
 ### Testing specific models
@@ -299,7 +296,7 @@ Edit `litellm/litellm-values.yaml` and add models to the Vault template:
 
 ```yaml
 vault.hashicorp.com/agent-inject-template-litellm-config: |
-  {{- with secret "secret/data/litellm/openrouter" -}}
+  {{- with secret "secret/data/litellm/secretapps" -}}
   # ... existing config ...
   model_list:
     # ... existing models ...
@@ -307,7 +304,7 @@ vault.hashicorp.com/agent-inject-template-litellm-config: |
       litellm_params:
         model: openrouter/google/gemini-pro
         api_base: https://openrouter.ai/api/v1
-        api_key: "{{ index .Data.data "api-key" }}"
+        api_key: "{{ index .Data.data "openrouter_api_key" }}"
   {{- end -}}
 ```
 
