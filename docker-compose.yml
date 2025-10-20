@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: litellm_postgres
+    # PostgreSQL 16 to match the official LiteLLM docker-compose example.
+    # This service simulates an AWS RDS PostgreSQL instance for local development.
+
+    environment:
+      # Initial database and credentials (created on first run)
+      POSTGRES_DB: litellm
+      POSTGRES_USER: llmproxy
+      # Use a secure password from your local .env file (not committed to git).
+      # The :? syntax makes the password mandatory at runtime.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+
+    ports:
+      # Expose the database on localhost:5432 for external access
+      - "5432:5432"
+
+    volumes:
+      # Persist database files in a named Docker volume
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      # Wait until the database is ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+    # Ensures the database restarts automatically if it crashes or on daemon restart.
+
+# Named volume for data durability across container restarts/recreates
+volumes:
+  postgres_data:
+    name: litellm_postgres_data
+
+# Example LiteLLM DATABASE_URL (set this in your shell or LiteLLM env):
+# postgresql://llmproxy:${POSTGRES_PASSWORD}@localhost:5432/litellm
