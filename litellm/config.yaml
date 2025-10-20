@@ -1,0 +1,22 @@
+# Reference only: not mounted by Helm by default.
+# This mirrors the injected config template and is included for documentation.
+
+general_settings:
+  master_key: "poc-master-key"
+
+litellm_settings:
+  drop_params: true
+  success_callback:
+    - "stdout"
+
+model_list:
+  - model_name: openai-gpt-4
+    litellm_params:
+      model: openrouter/openai/gpt-4
+      api_base: https://openrouter.ai/api/v1
+      api_key: "REPLACED_AT_RUNTIME_BY_VAULT_TEMPLATE"
+  - model_name: claude-3-opus
+    litellm_params:
+      model: openrouter/anthropic/claude-3-opus
+      api_base: https://openrouter.ai/api/v1
+      api_key: "REPLACED_AT_RUNTIME_BY_VAULT_TEMPLATE"

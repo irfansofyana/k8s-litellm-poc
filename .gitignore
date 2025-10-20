@@ -1,0 +1,25 @@
+# Helm charts (pulled locally)
+charts/
+
+# Temporary files
+*.tmp
+*.log
+/tmp/
+
+# Environment files with secrets
+.env
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Helm package files
+*.tgz

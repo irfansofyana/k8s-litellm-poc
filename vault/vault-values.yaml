@@ -1,0 +1,32 @@
+global:
+  tlsDisable: true
+
+server:
+  dev:
+    enabled: true
+    devRootToken: "root"
+  ha:
+    enabled: false
+  dataStorage:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  logLevel: "info"
+
+ui:
+  enabled: true
+
+injector:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

@@ -1,0 +1,68 @@
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: litellm
+
+# Vault Agent Injector annotations render config.yaml directly from Vault
+podAnnotations:
+  vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/role: "litellm-role"
+  vault.hashicorp.com/agent-pre-populate: "true"
+
+  # Render LiteLLM config.yaml using Vault template (no ConfigMap, no volume mount)
+  vault.hashicorp.com/agent-inject-secret-litellm-config: "secret/data/litellm/openrouter"
+  vault.hashicorp.com/agent-inject-file-litellm-config: "config.yaml"
+  vault.hashicorp.com/agent-inject-template-litellm-config: |
+    {{- with secret "secret/data/litellm/openrouter" -}}
+    # LiteLLM Proxy configuration (rendered by Vault Agent)
+    general_settings:
+      master_key: "poc-master-key"
+    litellm_settings:
+      drop_params: true
+      success_callback:
+        - "stdout"
+    model_list:
+      - model_name: openai-gpt-4
+        litellm_params:
+          model: openrouter/openai/gpt-4
+          api_base: https://openrouter.ai/api/v1
+          api_key: "{{ index .Data.data "api-key" }}"
+      - model_name: claude-3-opus
+        litellm_params:
+          model: openrouter/anthropic/claude-3-opus
+          api_base: https://openrouter.ai/api/v1
+          api_key: "{{ index .Data.data "api-key" }}"
+    {{- end -}}
+
+# Ensure we launch after the agent writes /vault/secrets/config.yaml
+# Override entrypoint to use the injected config file
+command:
+  - /bin/sh
+  - -lc
+  - |
+    if [ ! -f /vault/secrets/config.yaml ]; then
+      echo "ERROR: /vault/secrets/config.yaml not rendered by Vault Agent" >&2
+      ls -l /vault/secrets || true
+      exit 1
+    fi
+    exec litellm --proxy --config /vault/secrets/config.yaml --port 4000
+
+service:
+  type: ClusterIP
+  port: 4000
+
+# Disable built-in DB/Redis for the POC
+db:
+  deployStandalone: false
+
+redis:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
