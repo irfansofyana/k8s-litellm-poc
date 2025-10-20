@@ -150,6 +150,47 @@ kubectl -n litellm get pods -o jsonpath='{.items[0].spec.containers[*].name}'
 - Version control friendly (add `charts/` to `.gitignore`)
 - No internet dependency after initial pull
 
+## E2E verification (LiteLLM -> Postgres via Docker Compose)
+
+1) Ensure local Postgres is running and healthy
+```bash
+docker compose ps
+```
+
+2) Verify pod-to-host connectivity
+```bash
+kubectl -n litellm run netcheck --rm -i --image=alpine:3.20 -- sh -c 'apk add --no-cache busybox-extras && nc -zv host.docker.internal 5432'
+```
+
+3) Port-forward LiteLLM and send a test request
+```bash
+kubectl -n litellm port-forward svc/litellm 4000:4000 &
+
+curl -sS http://127.0.0.1:4000/chat/completions \
+  -H "Authorization: Bearer poc-master-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openai-gpt-4",
+    "messages": [{"role": "user", "content": "Say hello from LiteLLM connected to Postgres."}]
+  }' | jq -r '.id, .choices[0].message.content'
+```
+
+4) Confirm rows are written to Postgres
+```bash
+source .env
+psql "postgresql://llmproxy:${POSTGRES_PASSWORD}@localhost:5432/litellm" \
+  -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY 1;" \
+  -c "SELECT table_name, n_live_tup AS row_count FROM pg_stat_user_tables ORDER BY row_count DESC LIMIT 10;"
+```
+
+Notes
+- Vault Agent injects two files into the LiteLLM pod under /vault/secrets:
+  - config.yaml (OpenRouter models)
+  - db_env.sh (exports DATABASE_URL)
+- The container entrypoint is overridden to source db_env.sh, then run:
+  - `litellm --config /vault/secrets/config.yaml --port 4000`
+- No Kubernetes Secret is used for the database URL; it’s rendered from Vault at runtime.
+
 ## Troubleshooting
 
 ### LiteLLM pod not starting
