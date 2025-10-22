@@ -133,11 +133,21 @@ spec:
             - -lc
             - |
               set -euo pipefail
-              # Load secrets from Vault-injected env.sh if present
-              if [ -f /vault/secrets/env.sh ]; then
-                set -a
-                . /vault/secrets/env.sh
-                set +a
+              # Load secrets from Vault-injected .sh files if present
+              if [ -d /vault/secrets ]; then
+                echo "🔍 Checking for Vault secret files in /vault/secrets..."
+                for file in /vault/secrets/*.sh; do
+                  if [ -f "$file" ]; then
+                    echo "📄 Sourcing secrets from: $file"
+                    set -a
+                    . "$file"
+                    set +a
+                    echo "✅ Successfully loaded: $file"
+                  fi
+                done
+                echo "✓ Vault secrets loading complete"
+              else
+                echo "ℹ️  No /vault/secrets directory found, skipping Vault secret loading"
               fi
               # Run LiteLLM using ConfigMap-mounted config
               exec litellm --config /etc/litellm/config.yaml --port {{ .Values.service.port }}
