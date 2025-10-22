@@ -67,7 +67,7 @@ This POC deploys:
 - **HashiCorp Vault** (dev mode) with Agent Injector
 - **LiteLLM Proxy** with OpenRouter integration
 - **ConfigMap** holds model configuration (`config.yaml`) mounted at `/etc/litellm/config.yaml`
-- **Vault Agent Injector** renders `/vault/secrets/env.sh` exporting secrets as environment variables
+- **Vault Agent Injector** renders `/vault/secrets/app-credentials.sh` exporting secrets as environment variables
 - **Secret management** via Vault KV v2 at `secret/litellm/secrets` storing:
   - `master_key` (LiteLLM proxy master key)
   - `openrouter_api_key` (OpenRouter API key)
@@ -144,8 +144,8 @@ kubectl -n litellm rollout status deploy/litellm --timeout=300s
 **What happens:**
 - Chart creates a ConfigMap with model configuration from `proxy_config` values
 - ConfigMap is mounted at `/etc/litellm/config.yaml`
-- Vault Agent injects `/vault/secrets/env.sh` with secrets (master key, API keys, database URL)
-- Container sources `env.sh` and runs `litellm --config /etc/litellm/config.yaml`
+- Vault Agent injects `/vault/secrets/app-credentials.sh` with secrets (master key, API keys, database URL)
+- Container sources `app-credentials.sh` and runs `litellm --config /etc/litellm/config.yaml`
 
 ### 6) Test the proxy
 
@@ -168,8 +168,8 @@ curl -sS http://127.0.0.1:4000/chat/completions \
 ### 7) Verify setup
 
 ```bash
-# Check that env.sh was injected by Vault Agent
-kubectl -n litellm exec deploy/litellm -c litellm -- cat /vault/secrets/env.sh
+# Check that app-credentials.sh was injected by Vault Agent
+kubectl -n litellm exec deploy/litellm -c litellm -- cat /vault/secrets/app-credentials.sh
 
 # Check ConfigMap-mounted config
 kubectl -n litellm exec deploy/litellm -c litellm -- cat /etc/litellm/config.yaml
@@ -192,11 +192,11 @@ kubectl -n litellm get pods -o jsonpath='{.items[0].spec.containers[*].name}'
   - `master_key` - LiteLLM proxy master key
   - `openrouter_api_key` - OpenRouter API key  
   - `db_password` - PostgreSQL password
-- Vault Agent injects `/vault/secrets/env.sh` which exports:
+- Vault Agent injects `/vault/secrets/app-credentials.sh` which exports:
   - `PROXY_MASTER_KEY` - from `master_key`
   - `OPENROUTER_API_KEY` - from `openrouter_api_key`
   - `DATABASE_URL` - constructed from `db_password`
-- Container sources `env.sh` before starting LiteLLM
+- Container sources `app-credentials.sh` before starting LiteLLM
 - No secrets in plain text in ConfigMaps
 - When `vault.enabled=true`, no Kubernetes Secrets are created for master key
 
@@ -241,9 +241,9 @@ psql "postgresql://llmproxy:${POSTGRES_PASSWORD}@localhost:5432/litellm" \
 ```
 
 Notes
-- Vault Agent injects `/vault/secrets/env.sh` which exports all secrets as environment variables
+- Vault Agent injects `/vault/secrets/app-credentials.sh` which exports all secrets as environment variables
 - ConfigMap provides `/etc/litellm/config.yaml` with model configuration
-- The container command sources `env.sh`, then runs:
+- The container command sources `app-credentials.sh`, then runs:
   - `litellm --config /etc/litellm/config.yaml --port 4000`
 - No Kubernetes Secrets are created when `vault.enabled=true`; all secrets rendered from Vault at runtime
 

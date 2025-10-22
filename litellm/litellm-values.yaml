@@ -10,10 +10,10 @@ podAnnotations:
   vault.hashicorp.com/agent-pre-populate: "true"
   vault.hashicorp.com/agent-inject-status: "update"
 
-  # Inject a single env.sh which exports all required secrets from one Vault path
-  vault.hashicorp.com/agent-inject-secret-env: "secret/data/litellm/secrets"
-  vault.hashicorp.com/agent-inject-file-env: "env.sh"
-  vault.hashicorp.com/agent-inject-template-env: |
+  # Inject app-credentials.sh which exports all required secrets from one Vault path
+  vault.hashicorp.com/agent-inject-secret-app-credentials.sh: "secret/data/litellm/secrets"
+  vault.hashicorp.com/agent-inject-template-app-credentials.sh: |
+    #!/bin/sh
     {{- with secret "secret/data/litellm/secrets" }}
     export PROXY_MASTER_KEY="{{ .Data.data.master_key }}"
     export OPENROUTER_API_KEY="{{ .Data.data.openrouter_api_key }}"
