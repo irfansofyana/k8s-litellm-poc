@@ -11,9 +11,6 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 # Start local PostgreSQL database  
 docker compose up -d
-
-# Pull Helm charts locally
-./scripts/pull-charts.sh
 ```
 
 ### Kubernetes Deployment
@@ -151,10 +148,6 @@ helm template litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values
 # Upgrade deployments
 helm upgrade vault ./charts/vault -n litellm -f vault/vault-values.yaml
 helm upgrade litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values.yaml
-
-# Update charts to latest versions
-rm -rf charts/vault charts/litellm-helm
-./scripts/pull-charts.sh
 ```
 
 ### Troubleshooting

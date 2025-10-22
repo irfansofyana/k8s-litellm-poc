@@ -9,25 +9,22 @@ A POC for deploying LiteLLM Proxy on Kubernetes using the official LiteLLM Helm 
 ./scripts/generate-env.sh
 docker compose up -d
 
-# 1. Pull charts locally
-./scripts/pull-charts.sh
-
-# 2. Create namespace
+# 1. Create namespace
 kubectl create namespace litellm
 
-# 3. Install Vault
+# 2. Install Vault
 helm install vault ./charts/vault -n litellm -f vault/vault-values.yaml
 kubectl -n litellm wait --for=condition=ready pod -l app.kubernetes.io/name=vault --timeout=300s
 
-# 4. Initialize Vault with secrets (stores OpenRouter API key, database password, and master key)
+# 3. Initialize Vault with secrets (stores OpenRouter API key, database password, and master key)
 export OPENROUTER_API_KEY="sk-or-v1-..."
 ./vault/init-vault-secrets.sh
 
-# 5. Deploy LiteLLM
+# 4. Deploy LiteLLM
 helm install litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values.yaml
 kubectl -n litellm rollout status deploy/litellm --timeout=300s
 
-# 6. Test
+# 5. Test
 kubectl -n litellm port-forward svc/litellm 4000:4000 &
 source .env
 curl http://127.0.0.1:4000/chat/completions \
@@ -42,6 +39,7 @@ curl http://127.0.0.1:4000/chat/completions \
 - kubectl, Helm 3.8+, vault CLI, openssl
 - jq (optional, for testing)
 - OpenRouter API key
+- Helm charts are included in the repository (no need to pull separately)
 
 ## Architecture
 
@@ -70,45 +68,20 @@ docker compose ps
 
 **Note:** If you're using an external PostgreSQL instance instead of Docker Compose, you can skip `docker compose up -d`, but you must still provide the database password via `DB_PASSWORD`, `POSTGRES_PASSWORD`, or `.env` file so that Vault can be populated with the secret.
 
-### 2) Pull Helm charts locally
-
-**Option A: Use the helper script (recommended)**
-
-```bash
-./scripts/pull-charts.sh
-```
-
-**Option B: Manual pull**
-
-```bash
-# Add Vault Helm repository
-helm repo add hashicorp https://helm.releases.hashicorp.com
-helm repo update
-
-# Pull both charts to local directory
-mkdir -p charts
-helm pull hashicorp/vault --untar --untardir ./charts
-helm pull oci://ghcr.io/berriai/litellm-helm --untar --untardir ./charts
-```
-
-This creates:
-- `charts/vault/` - HashiCorp Vault chart
-- `charts/litellm-helm/` - LiteLLM chart
-
-### 3) Create namespace
+### 2) Create namespace
 
 ```bash
 kubectl create namespace litellm
 ```
 
-### 4) Install Vault (dev mode) with Injector
+### 3) Install Vault (dev mode) with Injector
 
 ```bash
 helm install vault ./charts/vault -n litellm -f vault/vault-values.yaml
 kubectl -n litellm wait --for=condition=ready pod -l app.kubernetes.io/name=vault --timeout=300s
 ```
 
-### 5) Initialize Vault and store secrets
+### 4) Initialize Vault and store secrets
 
 ```bash
 export OPENROUTER_API_KEY="sk-or-v1-..."
@@ -122,14 +95,14 @@ This script:
 - Creates policy `litellm-policy` for read access
 - Configures Kubernetes auth and creates role `litellm-role`
 
-### 6) Deploy LiteLLM with inline config (no ConfigMap mount)
+### 5) Deploy LiteLLM with inline config (no ConfigMap mount)
 
 ```bash
 helm install litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values.yaml
 kubectl -n litellm rollout status deploy/litellm --timeout=300s
 ```
 
-### 7) Test the proxy
+### 6) Test the proxy
 
 ```bash
 # Port-forward to access LiteLLM
@@ -147,7 +120,7 @@ curl -sS http://127.0.0.1:4000/chat/completions \
   }' | jq
 ```
 
-### 8) Verify Vault injection
+### 7) Verify Vault injection
 
 ```bash
 # Check that config.yaml was injected by Vault Agent
@@ -173,9 +146,8 @@ kubectl -n litellm get pods -o jsonpath='{.items[0].spec.containers[*].name}'
 - No secrets in plain text in ConfigMaps or environment variables
 
 ### Local Charts
-- Charts are pulled locally to `charts/` directory for offline deployment
-- Version control friendly (add `charts/` to `.gitignore`)
-- No internet dependency after initial pull
+- Charts are included in the repository in the `charts/` directory
+- No need to pull charts separately - ready for offline deployment
 
 ## E2E verification (LiteLLM -> Postgres via Docker Compose)
 
@@ -277,15 +249,10 @@ curl -sS http://127.0.0.1:4000/chat/completions \
   }' | jq
 ```
 
-## Updating charts
+## Upgrading deployments
 
-Pull latest versions:
+To upgrade existing deployments with updated values:
 ```bash
-rm -rf charts/vault charts/litellm-helm
-helm pull hashicorp/vault --untar --untardir ./charts
-helm pull oci://ghcr.io/berriai/litellm-helm --untar --untardir ./charts
-
-# Upgrade deployments
 helm upgrade vault ./charts/vault -n litellm -f vault/vault-values.yaml
 helm upgrade litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values.yaml
 ```
@@ -356,9 +323,8 @@ k8s-litellm-poc/
 │   └── config.yaml                # Reference config (not mounted)
 ├── scripts/
 │   ├── generate-env.sh            # Generate secure .env file
-│   ├── pull-charts.sh             # Script to pull Helm charts locally
 │   └── cleanup.sh                 # Cleanup script
-└── charts/                        # Local Helm charts (gitignored)
+└── charts/                        # Helm charts included in repository
     ├── vault/
     └── litellm-helm/
 ```

@@ -234,7 +234,6 @@ To validate this implementation, a new user should be able to:
 - [ ] Clone the repository
 - [ ] Run `./scripts/generate-env.sh` successfully
 - [ ] Start PostgreSQL with `docker compose up -d`
-- [ ] Pull Helm charts with `./scripts/pull-charts.sh`
 - [ ] Create namespace: `kubectl create namespace litellm`
 - [ ] Install Vault: `helm install vault ./charts/vault -n litellm -f vault/vault-values.yaml`
 - [ ] Initialize Vault: `OPENROUTER_API_KEY=<key> ./vault/init-vault-secrets.sh`
