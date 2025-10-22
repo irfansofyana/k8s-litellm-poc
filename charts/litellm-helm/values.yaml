@@ -93,6 +93,9 @@ masterkeySecretName: ""
 # if set, use this secret key for the master key; otherwise, use the default key
 masterkeySecretKey: ""
 
+vault:
+  enabled: false
+
 proxyConfigMap:
   # when true, creates a new configmap
   create: true

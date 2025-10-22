@@ -10,9 +10,10 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/generate-env.sh
 
-Generates a secure .env file with 40-character random passwords for:
-  - POSTGRES_PASSWORD (database password)
-  - LITELLM_MASTER_KEY (LiteLLM API authentication key)
+Generates a secure .env file with:
+  - POSTGRES_PASSWORD (40-character random database password)
+  - LITELLM_MASTER_KEY (40-character random LiteLLM API authentication key)
+  - OPENROUTER_API_KEY (placeholder - you must update this with your actual key)
 
 If .env already exists, you will be prompted before overwriting.
 
@@ -86,6 +87,9 @@ echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> "$TEMP_FILE"
 echo "" >> "$TEMP_FILE"
 echo "# LiteLLM master key for API authentication" >> "$TEMP_FILE"
 echo "LITELLM_MASTER_KEY=$LITELLM_MASTER_KEY" >> "$TEMP_FILE"
+echo "" >> "$TEMP_FILE"
+echo "# OpenRouter API key - REPLACE THIS WITH YOUR ACTUAL KEY" >> "$TEMP_FILE"
+echo "OPENROUTER_API_KEY=sk-or-v1-REPLACE_ME_WITH_YOUR_ACTUAL_OPENROUTER_API_KEY" >> "$TEMP_FILE"
 
 # Move atomically and set permissions
 mv "$TEMP_FILE" "$ENV_FILE"
@@ -94,9 +98,12 @@ chmod 600 "$ENV_FILE"
 echo "[SUCCESS] $ENV_FILE created with secure credentials:"
 echo "          - POSTGRES_PASSWORD (40 characters)"
 echo "          - LITELLM_MASTER_KEY (40 characters)"
+echo "          - OPENROUTER_API_KEY (placeholder - MUST BE REPLACED)"
 echo "          File permissions set to 600 (owner read/write only)."
 echo ""
+echo "⚠️  IMPORTANT: Edit .env and replace OPENROUTER_API_KEY with your actual key!"
+echo ""
 echo "Next steps:"
-echo "  1. docker compose up -d"
-echo "  2. export OPENROUTER_API_KEY=<your-key>"
-echo "  3. ./vault/init-vault-secrets.sh  (stores all secrets in Vault)"
+echo "  1. Edit .env and set your actual OPENROUTER_API_KEY"
+echo "  2. docker compose up -d"
+echo "  3. ./vault/init-vault-secrets.sh  (reads all secrets from .env and stores in Vault)"

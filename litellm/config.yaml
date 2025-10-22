@@ -1,10 +1,10 @@
-# Reference only: not mounted by Helm by default.
-# This mirrors the injected config template and is included for documentation.
-# All secrets (master_key, api_key) are injected at runtime by Vault Agent.
+# Reference only: for documentation purposes.
+# The actual config is rendered from proxy_config in litellm-values.yaml into a ConfigMap.
+# Secrets (master_key, api_key) are provided as environment variables via Vault Agent.
 
 general_settings:
-  # Injected at runtime by Vault Agent from secret/litellm/masterkey
-  master_key: "REPLACED_AT_RUNTIME_BY_VAULT_TEMPLATE"
+  # References PROXY_MASTER_KEY environment variable exported by Vault Agent
+  master_key: os.environ/PROXY_MASTER_KEY
 
 litellm_settings:
   drop_params: true
@@ -16,9 +16,9 @@ model_list:
     litellm_params:
       model: openrouter/openai/gpt-4
       api_base: https://openrouter.ai/api/v1
-      api_key: "REPLACED_AT_RUNTIME_BY_VAULT_TEMPLATE"
+      api_key: os.environ/OPENROUTER_API_KEY
   - model_name: claude-3-opus
     litellm_params:
       model: openrouter/anthropic/claude-3-opus
       api_base: https://openrouter.ai/api/v1
-      api_key: "REPLACED_AT_RUNTIME_BY_VAULT_TEMPLATE"
+      api_key: os.environ/OPENROUTER_API_KEY

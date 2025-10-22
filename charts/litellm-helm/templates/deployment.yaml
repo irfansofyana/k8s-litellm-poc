@@ -86,11 +86,13 @@ spec:
             - name: DATABASE_URL
               value: {{ .Values.db.url | quote }}
             {{- end }}
+            {{- if not .Values.vault.enabled }}
             - name: PROXY_MASTER_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.masterkeySecretName | default (printf "%s-masterkey" (include "litellm.fullname" .)) }}
                   key: {{ .Values.masterkeySecretKey | default "masterkey" }}
+            {{- end }}
             {{- if .Values.redis.enabled }}
             - name: REDIS_HOST
               value: {{ include "litellm.redis.serviceName" . }}
@@ -131,14 +133,14 @@ spec:
             - -lc
             - |
               set -euo pipefail
-              # Load DATABASE_URL from Vault-injected script if present
-              if [ -f /vault/secrets/db_env.sh ]; then
+              # Load secrets from Vault-injected env.sh if present
+              if [ -f /vault/secrets/env.sh ]; then
                 set -a
-                . /vault/secrets/db_env.sh
+                . /vault/secrets/env.sh
                 set +a
               fi
-              # Run LiteLLM using Vault-injected config
-              exec litellm --config /vault/secrets/config.yaml --port {{ .Values.service.port }}
+              # Run LiteLLM using ConfigMap-mounted config
+              exec litellm --config /etc/litellm/config.yaml --port {{ .Values.service.port }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
