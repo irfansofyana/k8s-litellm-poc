@@ -86,11 +86,13 @@ spec:
             - name: DATABASE_URL
               value: {{ .Values.db.url | quote }}
             {{- end }}
+            {{- if not .Values.vault.enabled }}
             - name: PROXY_MASTER_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.masterkeySecretName | default (printf "%s-masterkey" (include "litellm.fullname" .)) }}
                   key: {{ .Values.masterkeySecretKey | default "masterkey" }}
+            {{- end }}
             {{- if .Values.redis.enabled }}
             - name: REDIS_HOST
               value: {{ include "litellm.redis.serviceName" . }}
@@ -131,14 +133,24 @@ spec:
             - -lc
             - |
               set -euo pipefail
-              # Load DATABASE_URL from Vault-injected script if present
-              if [ -f /vault/secrets/db_env.sh ]; then
-                set -a
-                . /vault/secrets/db_env.sh
-                set +a
+              # Load secrets from Vault-injected .sh files if present
+              if [ -d /vault/secrets ]; then
+                echo "🔍 Checking for Vault secret files in /vault/secrets..."
+                for file in /vault/secrets/*.sh; do
+                  if [ -f "$file" ]; then
+                    echo "📄 Sourcing secrets from: $file"
+                    set -a
+                    . "$file"
+                    set +a
+                    echo "✅ Successfully loaded: $file"
+                  fi
+                done
+                echo "✓ Vault secrets loading complete"
+              else
+                echo "ℹ️  No /vault/secrets directory found, skipping Vault secret loading"
               fi
-              # Run LiteLLM using Vault-injected config
-              exec litellm --config /vault/secrets/config.yaml --port {{ .Values.service.port }}
+              # Run LiteLLM using ConfigMap-mounted config
+              exec litellm --config /etc/litellm/config.yaml --port {{ .Values.service.port }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

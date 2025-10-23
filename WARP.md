@@ -11,9 +11,6 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 # Start local PostgreSQL database  
 docker compose up -d
-
-# Pull Helm charts locally
-./scripts/pull-charts.sh
 ```
 
 ### Kubernetes Deployment
@@ -47,7 +44,7 @@ curl http://127.0.0.1:4000/chat/completions \
   -d '{"model":"openai-gpt-4","messages":[{"role":"user","content":"Hello!"}]}'
 
 # Verify Vault injection worked
-kubectl -n litellm exec deploy/litellm -c litellm -- cat /vault/secrets/config.yaml
+kubectl -n litellm exec deploy/litellm -c litellm -- cat /vault/secrets/app-credentials.sh
 ```
 
 ### Cleanup
@@ -76,10 +73,10 @@ kubectl -n litellm exec deploy/litellm -c litellm -- cat /vault/secrets/config.y
 - **Secret Management**: No Kubernetes Secrets - all via Vault KV v2
 
 ### Secret Management Architecture
-- `secret/litellm/secretapps`: OpenRouter API key and LiteLLM master key
-- `secret/litellm/database`: PostgreSQL password
-- Vault Agent renders config.yaml and db_env.sh at pod startup
-- No ConfigMap volumes - configuration is inline in Helm values as Vault templates
+- `secret/litellm/secrets`: OpenRouter API key, LiteLLM master key, and database password
+- Vault Agent renders app-credentials.sh at pod startup
+- ConfigMap holds model configuration (config.yaml) mounted at `/etc/litellm/config.yaml`
+- Secrets are environment variables exported from app-credentials.sh
 
 ## Configuration and Environment
 
@@ -131,8 +128,7 @@ export VAULT_ADDR=http://127.0.0.1:8200
 export VAULT_TOKEN=root
 
 # Verify secrets
-vault kv get secret/litellm/secretapps
-vault kv get secret/litellm/database
+vault kv get secret/litellm/secrets
 
 # Check Kubernetes auth
 vault read auth/kubernetes/role/litellm-role
@@ -151,10 +147,6 @@ helm template litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values
 # Upgrade deployments
 helm upgrade vault ./charts/vault -n litellm -f vault/vault-values.yaml
 helm upgrade litellm ./charts/litellm-helm -n litellm -f litellm/litellm-values.yaml
-
-# Update charts to latest versions
-rm -rf charts/vault charts/litellm-helm
-./scripts/pull-charts.sh
 ```
 
 ### Troubleshooting

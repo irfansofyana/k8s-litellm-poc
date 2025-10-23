@@ -2,7 +2,99 @@
 
 This document tracks the changes made to enable complete from-scratch deployment of LiteLLM with PostgreSQL.
 
-## Security: Store LiteLLM Master Key in Vault (Latest)
+## Vault Agent Init-First Configuration (Latest)
+
+### Summary
+
+Updated Vault Agent to use init container mode with `agent-init-first: "true"` and `agent-pre-populate-only: "true"` for guaranteed secret availability before application startup. This provides a more reliable and resource-efficient deployment pattern.
+
+### Changes
+
+**Modified Files:**
+1. **litellm/litellm-values.yaml**
+   - Added `vault.hashicorp.com/agent-init-first: "true"` - Vault Agent runs as init container
+   - Changed `agent-pre-populate: "true"` to `agent-pre-populate-only: "true"` - Agent exits after populating secrets
+   - Removed `agent-inject-status: "update"` - Not needed without continuous sidecar
+
+### Benefits
+
+1. **Guaranteed Secret Availability**: Application container only starts after secrets are successfully retrieved
+2. **Resource Efficiency**: No persistent sidecar consuming CPU/memory
+3. **Fail-Fast Behavior**: Pod fails immediately if Vault is misconfigured or unreachable
+4. **Simpler Architecture**: Single-purpose init container instead of long-running sidecar
+5. **Predictable Startup**: Clear init phase → run phase separation
+
+### Trade-offs
+
+- **Secret Updates Require Restart**: Must run `kubectl rollout restart` to refresh secrets (previously could use annotation updates)
+- **No Auto-Rotation**: Secrets fetched once at startup, not continuously refreshed
+- **Vault Required at Deploy**: Pod won't start if Vault is unavailable (good for catching config issues early)
+
+These trade-offs are acceptable for POC/dev environments with static secrets like API keys and database passwords.
+
+---
+
+## Vault Agent Annotation Format Update
+
+### Summary
+
+Updated Vault Agent annotations to use the standard two-annotation format (`agent-inject-secret-*` + `agent-inject-template-*`) instead of the deprecated three-annotation format. Changed injected file name from `env.sh` to `app-credentials.sh`.
+
+### Rationale
+
+The previous configuration used three separate annotations:
+- `vault.hashicorp.com/agent-inject-secret-env`
+- `vault.hashicorp.com/agent-inject-file-env`
+- `vault.hashicorp.com/agent-inject-template-env`
+
+This is the older/verbose format. The modern standard approach combines the secret path and filename into a single annotation name, requiring only two annotations per secret file.
+
+### Changes
+
+**Modified Files:**
+1. **litellm/litellm-values.yaml**
+   - Removed three-annotation format (agent-inject-secret-env, agent-inject-file-env, agent-inject-template-env)
+   - Implemented standard two-annotation format:
+     - `vault.hashicorp.com/agent-inject-secret-app-credentials.sh: "secret/data/litellm/secrets"`
+     - `vault.hashicorp.com/agent-inject-template-app-credentials.sh: |`
+   - Changed file name from `env.sh` to `app-credentials.sh`
+   - Added shebang (`#!/bin/sh`) to the template for better shell compatibility
+   - Maintained proper variable quoting for security
+
+2. **README.md**
+   - Updated all references from `/vault/secrets/env.sh` to `/vault/secrets/app-credentials.sh`
+   - Updated architecture description
+   - Updated verification commands
+   - Updated secret management documentation
+
+3. **WARP.md**
+   - Updated verification command to check `app-credentials.sh`
+   - Updated secret management architecture description
+   - Corrected Vault path references to match actual implementation
+
+### Technical Details
+
+The deployment's startup command automatically sources all `.sh` files in `/vault/secrets/`:
+```bash
+for file in /vault/secrets/*.sh; do
+  if [ -f "$file" ]; then
+    . "$file"
+  fi
+done
+```
+
+This means the filename change is transparent to the application - both `env.sh` and `app-credentials.sh` work identically.
+
+### Benefits
+
+1. **Standard Format**: Uses the recommended Vault Agent annotation pattern
+2. **Cleaner Syntax**: Two annotations instead of three
+3. **Better Compatibility**: Aligns with Vault documentation examples
+4. **Descriptive Name**: `app-credentials.sh` is more descriptive than generic `env.sh`
+
+---
+
+## Security: Store LiteLLM Master Key in Vault
 
 ### Summary
 
@@ -234,7 +326,6 @@ To validate this implementation, a new user should be able to:
 - [ ] Clone the repository
 - [ ] Run `./scripts/generate-env.sh` successfully
 - [ ] Start PostgreSQL with `docker compose up -d`
-- [ ] Pull Helm charts with `./scripts/pull-charts.sh`
 - [ ] Create namespace: `kubectl create namespace litellm`
 - [ ] Install Vault: `helm install vault ./charts/vault -n litellm -f vault/vault-values.yaml`
 - [ ] Initialize Vault: `OPENROUTER_API_KEY=<key> ./vault/init-vault-secrets.sh`
