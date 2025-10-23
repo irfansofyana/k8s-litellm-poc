@@ -6,9 +6,9 @@ serviceAccount:
 
 podAnnotations:
   vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/agent-init-first: "true"
+  vault.hashicorp.com/agent-pre-populate-only: "true"
   vault.hashicorp.com/role: "litellm-role"
-  vault.hashicorp.com/agent-pre-populate: "true"
-  vault.hashicorp.com/agent-inject-status: "update"
 
   # Inject app-credentials.sh which exports all required secrets from one Vault path
   vault.hashicorp.com/agent-inject-secret-app-credentials.sh: "secret/data/litellm/secrets"

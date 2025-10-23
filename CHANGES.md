@@ -2,7 +2,39 @@
 
 This document tracks the changes made to enable complete from-scratch deployment of LiteLLM with PostgreSQL.
 
-## Vault Agent Annotation Format Update (Latest)
+## Vault Agent Init-First Configuration (Latest)
+
+### Summary
+
+Updated Vault Agent to use init container mode with `agent-init-first: "true"` and `agent-pre-populate-only: "true"` for guaranteed secret availability before application startup. This provides a more reliable and resource-efficient deployment pattern.
+
+### Changes
+
+**Modified Files:**
+1. **litellm/litellm-values.yaml**
+   - Added `vault.hashicorp.com/agent-init-first: "true"` - Vault Agent runs as init container
+   - Changed `agent-pre-populate: "true"` to `agent-pre-populate-only: "true"` - Agent exits after populating secrets
+   - Removed `agent-inject-status: "update"` - Not needed without continuous sidecar
+
+### Benefits
+
+1. **Guaranteed Secret Availability**: Application container only starts after secrets are successfully retrieved
+2. **Resource Efficiency**: No persistent sidecar consuming CPU/memory
+3. **Fail-Fast Behavior**: Pod fails immediately if Vault is misconfigured or unreachable
+4. **Simpler Architecture**: Single-purpose init container instead of long-running sidecar
+5. **Predictable Startup**: Clear init phase → run phase separation
+
+### Trade-offs
+
+- **Secret Updates Require Restart**: Must run `kubectl rollout restart` to refresh secrets (previously could use annotation updates)
+- **No Auto-Rotation**: Secrets fetched once at startup, not continuously refreshed
+- **Vault Required at Deploy**: Pod won't start if Vault is unavailable (good for catching config issues early)
+
+These trade-offs are acceptable for POC/dev environments with static secrets like API keys and database passwords.
+
+---
+
+## Vault Agent Annotation Format Update
 
 ### Summary
 
